@@ -13,39 +13,12 @@
 #define RFM95_INT   3
 #define RFM95_RST   9
 
-
-/* Some other possible setups include:
-
-// Feather 32u4:
-#define RFM95_CS   8
-#define RFM95_RST  4
-#define RFM95_INT  7
-
-// Feather M0:
-#define RFM95_CS   8
-#define RFM95_RST  4
-#define RFM95_INT  3
-
-// Arduino shield:
-#define RFM95_CS  10
-#define RFM95_RST  9
-#define RFM95_INT  7
-
-// Feather 32u4 w/wing:
-#define RFM95_RST 11  // "A"
-#define RFM95_CS  10  // "B"
-#define RFM95_INT  2  // "SDA" (only SDA/SCL/RX/TX have IRQ!)
-
-// Feather m0 w/wing:
-#define RFM95_RST 11  // "A"
-#define RFM95_CS  10  // "B"
-#define RFM95_INT  6  // "D"
-*/
+enum messageType : uint8_t {dataMessage, errorMessage};
 
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 434.0
 
-#define SENSOR_COUNT 5
+#define SENSOR_COUNT 7
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -59,8 +32,6 @@ void setup() {
   while (!Serial) delay(1);
   delay(100);
 
-  Serial.println("Feather LoRa RX Test!");
-
   // manual reset
   digitalWrite(RFM95_RST, LOW);
   delay(10);
@@ -68,18 +39,17 @@ void setup() {
   delay(10);
 
   while (!rf95.init()) {
-    Serial.println("LoRa radio init failed");
-    Serial.println("Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
+    Serial.println("ERROR:LoRa radio init failed");
+    Serial.println("ERROR:Uncomment '#define SERIAL_DEBUG' in RH_RF95.cpp for detailed debug info");
     while (1);
   }
-  Serial.println("LoRa radio init OK!");
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(RF95_FREQ)) {
-    Serial.println("setFrequency failed");
+    Serial.println("ERROR:setFrequency failed");
     while (1);
   }
-  Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
+  Serial.print("INFO:Set Freq to: "); Serial.println(RF95_FREQ);
 
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
 
@@ -97,23 +67,41 @@ void loop() {
 
     if (rf95.recv(buf, &len)) {
       digitalWrite(LED_BUILTIN, HIGH);
-      RH_RF95::printBuffer("Received: ", buf, len);
-      Serial.print("Got: ");
-      Serial.println((char*)buf);
-       Serial.print("RSSI: ");
-      Serial.println(rf95.lastRssi(), DEC);
+      // RH_RF95::printBuffer("Received: ", buf, len);
+      // Serial.print("Got: ");
+      // Serial.println((char*)&(buf[1]));
 
-      double* vals = (double*)buf;
+      // Serial.print("Length: ");
+      // Serial.println(len);
 
-      for (int i = 0; i < SENSOR_COUNT; i++) {
-        if (i > 0) {
-          Serial.print(", ");
+      messageType type = (messageType)buf[0];
+
+      if (type == dataMessage) {
+        Serial.print("DATA:");
+
+        double* vals = (double*)&(buf[1]);
+
+        for (int i = 0; i < SENSOR_COUNT; i++) {
+          if (i > 0) {
+            Serial.print(", ");
+          }
+          Serial.print(vals[i]);
         }
-        Serial.print(vals[i]);
+        Serial.println();
+
+        // Serial.print("RSSI: ");
+        // Serial.println(rf95.lastRssi(), DEC);
       }
-      Serial.println();
+      else if (type == errorMessage) {
+        Serial.print("ERROR:");
+        Serial.println((char*)&(buf[1]));
+      }
+      else {
+        Serial.println("ERROR:Unknown message type");
+      }
+
     } else {
-      Serial.println("Receive failed");
+      Serial.println("ERROR:Receive failed");
     }
   }
 }
